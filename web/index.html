@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LogicBuilder</title>
+<link rel="preload" href="/fonts/geist-400.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/geist-mono-400.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/style.css">
+<script>
+/* apply saved appearance before first paint (no flash) */
+try{var d=document.documentElement,s=localStorage,t=s.getItem("lb-theme"),m=s.getItem("lb-mono"),h=s.getItem("lb-head"),z=s.getItem("lb-size");
+if(t==="light"||t==="dark")d.dataset.theme=t;if(m)d.dataset.mono=m;if(h)d.dataset.head=h;if(z)d.style.setProperty("--code-size",z+"px");}catch(e){}
+</script>
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="#/">◆ LogicBuilder</a>
+  <nav>
+    <a href="#/learn">Learn</a>
+    <a href="#/practice">Practice</a>
+    <a href="#/review">Review <span id="review-n" class="pill" hidden></span></a>
+    <a href="#/skills">Skills</a>
+    <a href="#/playground">Playground</a>
+    <a href="#/languages">Languages</a>
+  </nav>
+  <div class="stats" id="stats"></div>
+  <select id="user" title="Switch learner"></select>
+  <button id="user-add" class="icon" title="Add a learner">＋</button>
+  <a class="icon" href="#/account" title="Account">☺</a>
+  <div class="appear">
+    <button id="theme" class="icon" title="Theme: auto / light / dark" aria-label="Toggle theme">◐</button>
+    <button id="aa" class="icon" title="Appearance (fonts, code size)" aria-label="Appearance" aria-expanded="false"><b>Aa</b></button>
+    <div id="pop" class="pop" hidden>
+      <label>Theme</label>
+      <div class="seg" id="seg-theme"><button data-v="auto">Auto</button><button data-v="light">Light</button><button data-v="dark">Dark</button></div>
+      <label for="sel-mono">Code font</label>
+      <select id="sel-mono">
+        <option value="geist">Geist Mono</option>
+        <option value="fira-mono">Fira Mono</option>
+        <option value="fira-code">Fira Code (ligatures)</option>
+        <option value="jetbrains">JetBrains Mono</option>
+        <option value="system">System monospace</option>
+      </select>
+      <label for="sel-head">Heading font</label>
+      <select id="sel-head">
+        <option value="oswald">Oswald</option>
+        <option value="same">Same as body (Geist)</option>
+        <option value="mono">Monospace</option>
+      </select>
+      <label for="rng-size">Code size: <span id="size-val">14</span>px</label>
+      <input type="range" id="rng-size" min="12" max="20" step="1" value="14">
+      <div class="sample">def two_sum(nums, t):
+    return [i for i in nums if i&lt;=t]  # 0123</div>
+    </div>
+  </div>
+  <button id="ai-toggle" class="btn accent">✦ AI Tutor</button>
+</header>
+<main id="view"></main>
+
+<aside id="ai" class="ai" hidden>
+  <div class="ai-head">
+    <strong>AI Tutor</strong>
+    <select id="ai-family" title="Model family"></select>
+    <select id="ai-provider" title="Where the model runs">
+      <option value="ollama">Local (Ollama)</option>
+      <option value="openrouter">Cloud (OpenRouter)</option>
+    </select>
+    <button id="ai-gear" class="icon" title="Settings">⚙</button>
+    <button id="ai-close" class="icon" title="Close">✕</button>
+  </div>
+  <div id="ai-settings" class="ai-settings" hidden></div>
+  <div id="ai-status" class="ai-status"></div>
+  <div id="ai-log" class="ai-log"></div>
+  <div class="ai-quick" id="ai-quick"></div>
+  <form id="ai-form" class="ai-form">
+    <textarea id="ai-input" rows="2" placeholder="Ask anything about what you're learning…"></textarea>
+    <button class="btn accent" type="submit">Send</button>
+  </form>
+</aside>
+<script src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,128 @@
+"""Cross-language cheat sheet ("Rosetta stone") + interview language guidance. Data only."""
+
+LANG_ORDER = ["python", "javascript", "typescript", "java", "cpp", "go", "csharp"]
+
+ADVICE = [
+    {"lang": "Python", "when": "Default choice for interviews at most companies. Shortest code, rich built-ins (dict, set, heapq, collections), so you spend time on the idea, not the syntax.", "watch": "Slow for heavy loops. Recursion depth limit is about 1000."},
+    {"lang": "Java", "when": "Expected for many enterprise, Android and big-company backend roles. Strong typing, huge standard library (Collections).", "watch": "Verbose. `int` overflows at 2,147,483,647. Compare strings with `.equals`, not `==`."},
+    {"lang": "C++", "when": "Competitive programming, systems, game and performance roles. STL (vector, unordered_map, priority_queue) is very fast.", "watch": "Undefined behaviour (out-of-range index, uninitialised values). `int` overflow. Know references and iterators."},
+    {"lang": "JavaScript / TypeScript", "when": "Frontend, full-stack and Node.js roles. TypeScript adds the types many teams require.", "watch": "`==` vs `===`. Default `sort()` compares as strings! Numbers are floats (safe integers up to 2^53)."},
+    {"lang": "Go", "when": "Backend, cloud and infrastructure roles. Simple language, built-in concurrency.", "watch": "No generics-heavy standard library for DSA; you write more yourself. Unused variables and imports do not compile."},
+    {"lang": "C#", "when": ".NET, enterprise and Unity roles. Very similar to Java with LINQ conveniences.", "watch": "`int` overflow is silent by default. `string` is immutable."},
+]
+
+# Each concept: title, optional note, and a snippet per language.
+CONCEPTS = [
+    {"title": "Print a value", "code": {
+        "python": 'print("Hello", 5)',
+        "javascript": 'console.log("Hello", 5);',
+        "typescript": 'console.log("Hello", 5);',
+        "java": 'System.out.println("Hello " + 5);',
+        "cpp": 'cout << "Hello " << 5 << endl;',
+        "go": 'fmt.Println("Hello", 5)',
+        "csharp": 'Console.WriteLine("Hello " + 5);'}},
+    {"title": "Variables", "note": "Python is dynamically typed. The others declare (or infer) a type.", "code": {
+        "python": 'x = 5\nname = "Asha"',
+        "javascript": 'let x = 5;\nconst name = "Asha";',
+        "typescript": 'let x: number = 5;\nconst name: string = "Asha";',
+        "java": 'int x = 5;\nString name = "Asha";',
+        "cpp": 'int x = 5;\nstring name = "Asha";',
+        "go": 'x := 5\nname := "Asha"',
+        "csharp": 'int x = 5;\nstring name = "Asha";'}},
+    {"title": "Integer division and remainder", "note": "Gotcha: `/` on integers truncates in Java/C++/Go/C#, gives a decimal in Python and JavaScript.", "code": {
+        "python": '7 // 2   # 3\n7 % 2    # 1\n7 / 2    # 3.5',
+        "javascript": 'Math.floor(7 / 2)  // 3\n7 % 2              // 1\n7 / 2              // 3.5',
+        "typescript": 'Math.floor(7 / 2)  // 3\n7 % 2              // 1\n7 / 2              // 3.5',
+        "java": '7 / 2   // 3\n7 % 2   // 1\n7 / 2.0 // 3.5',
+        "cpp": '7 / 2   // 3\n7 % 2   // 1\n7 / 2.0 // 3.5',
+        "go": '7 / 2   // 3\n7 % 2   // 1',
+        "csharp": '7 / 2   // 3\n7 % 2   // 1\n7 / 2.0 // 3.5'}},
+    {"title": "If / else", "code": {
+        "python": 'if x > 3:\n    print("big")\nelif x == 3:\n    print("three")\nelse:\n    print("small")',
+        "javascript": 'if (x > 3) {\n    console.log("big");\n} else if (x === 3) {\n    console.log("three");\n} else {\n    console.log("small");\n}',
+        "typescript": 'if (x > 3) {\n    console.log("big");\n} else if (x === 3) {\n    console.log("three");\n} else {\n    console.log("small");\n}',
+        "java": 'if (x > 3) {\n    System.out.println("big");\n} else if (x == 3) {\n    System.out.println("three");\n} else {\n    System.out.println("small");\n}',
+        "cpp": 'if (x > 3) {\n    cout << "big" << endl;\n} else if (x == 3) {\n    cout << "three" << endl;\n} else {\n    cout << "small" << endl;\n}',
+        "go": 'if x > 3 {\n    fmt.Println("big")\n} else if x == 3 {\n    fmt.Println("three")\n} else {\n    fmt.Println("small")\n}',
+        "csharp": 'if (x > 3) {\n    Console.WriteLine("big");\n} else if (x == 3) {\n    Console.WriteLine("three");\n} else {\n    Console.WriteLine("small");\n}'}},
+    {"title": "Loop 0 to n-1", "code": {
+        "python": 'for i in range(n):\n    print(i)',
+        "javascript": 'for (let i = 0; i < n; i++) {\n    console.log(i);\n}',
+        "typescript": 'for (let i = 0; i < n; i++) {\n    console.log(i);\n}',
+        "java": 'for (int i = 0; i < n; i++) {\n    System.out.println(i);\n}',
+        "cpp": 'for (int i = 0; i < n; i++) {\n    cout << i << endl;\n}',
+        "go": 'for i := 0; i < n; i++ {\n    fmt.Println(i)\n}',
+        "csharp": 'for (int i = 0; i < n; i++) {\n    Console.WriteLine(i);\n}'}},
+    {"title": "While loop", "code": {
+        "python": 'while n > 1:\n    n //= 2',
+        "javascript": 'while (n > 1) {\n    n = Math.floor(n / 2);\n}',
+        "typescript": 'while (n > 1) {\n    n = Math.floor(n / 2);\n}',
+        "java": 'while (n > 1) {\n    n /= 2;\n}',
+        "cpp": 'while (n > 1) {\n    n /= 2;\n}',
+        "go": 'for n > 1 {\n    n /= 2\n}',
+        "csharp": 'while (n > 1) {\n    n /= 2;\n}'}},
+    {"title": "Function", "code": {
+        "python": 'def add(a, b):\n    return a + b',
+        "javascript": 'function add(a, b) {\n    return a + b;\n}',
+        "typescript": 'function add(a: number, b: number): number {\n    return a + b;\n}',
+        "java": 'static int add(int a, int b) {\n    return a + b;\n}',
+        "cpp": 'int add(int a, int b) {\n    return a + b;\n}',
+        "go": 'func add(a int, b int) int {\n    return a + b\n}',
+        "csharp": 'static int Add(int a, int b) {\n    return a + b;\n}'}},
+    {"title": "Array / list: create, add, read, length", "note": "Java arrays and Go arrays have fixed size; use ArrayList / slices when you need to grow.", "code": {
+        "python": 'a = [4, 8]\na.append(15)\nx = a[0]\nn = len(a)',
+        "javascript": 'const a = [4, 8];\na.push(15);\nconst x = a[0];\nconst n = a.length;',
+        "typescript": 'const a: number[] = [4, 8];\na.push(15);\nconst x = a[0];\nconst n = a.length;',
+        "java": 'List<Integer> a = new ArrayList<>(List.of(4, 8));\na.add(15);\nint x = a.get(0);\nint n = a.size();',
+        "cpp": 'vector<int> a = {4, 8};\na.push_back(15);\nint x = a[0];\nint n = a.size();',
+        "go": 'a := []int{4, 8}\na = append(a, 15)\nx := a[0]\nn := len(a)',
+        "csharp": 'var a = new List<int> { 4, 8 };\na.Add(15);\nint x = a[0];\nint n = a.Count;'}},
+    {"title": "Dictionary / hash map: set, get, has key", "note": "The #1 tool in interviews: O(1) lookups. Know it in your language.", "code": {
+        "python": 'd = {}\nd["a"] = 1\nv = d["a"]\nhas = "a" in d',
+        "javascript": 'const d = new Map();\nd.set("a", 1);\nconst v = d.get("a");\nconst has = d.has("a");',
+        "typescript": 'const d = new Map<string, number>();\nd.set("a", 1);\nconst v = d.get("a");\nconst has = d.has("a");',
+        "java": 'Map<String, Integer> d = new HashMap<>();\nd.put("a", 1);\nint v = d.get("a");\nboolean has = d.containsKey("a");',
+        "cpp": 'unordered_map<string, int> d;\nd["a"] = 1;\nint v = d["a"];\nbool has = d.count("a") > 0;',
+        "go": 'd := map[string]int{}\nd["a"] = 1\nv := d["a"]\n_, has := d["a"]',
+        "csharp": 'var d = new Dictionary<string, int>();\nd["a"] = 1;\nint v = d["a"];\nbool has = d.ContainsKey("a");'}},
+    {"title": "Set: add, contains", "code": {
+        "python": 's = set()\ns.add(3)\nhas = 3 in s',
+        "javascript": 'const s = new Set();\ns.add(3);\nconst has = s.has(3);',
+        "typescript": 'const s = new Set<number>();\ns.add(3);\nconst has = s.has(3);',
+        "java": 'Set<Integer> s = new HashSet<>();\ns.add(3);\nboolean has = s.contains(3);',
+        "cpp": 'unordered_set<int> s;\ns.insert(3);\nbool has = s.count(3) > 0;',
+        "go": 's := map[int]bool{}\ns[3] = true\nhas := s[3]',
+        "csharp": 'var s = new HashSet<int>();\ns.Add(3);\nbool has = s.Contains(3);'}},
+    {"title": "Strings: length, character, substring, compare", "note": "Gotcha: in Java compare with `.equals`; in C++/Python/Go/C# `==` compares text.", "code": {
+        "python": 'n = len(s)\nc = s[0]\nsub = s[1:4]\nsame = (s == t)',
+        "javascript": 'const n = s.length;\nconst c = s[0];\nconst sub = s.slice(1, 4);\nconst same = (s === t);',
+        "typescript": 'const n = s.length;\nconst c = s[0];\nconst sub = s.slice(1, 4);\nconst same = (s === t);',
+        "java": 'int n = s.length();\nchar c = s.charAt(0);\nString sub = s.substring(1, 4);\nboolean same = s.equals(t);',
+        "cpp": 'int n = s.size();\nchar c = s[0];\nstring sub = s.substr(1, 3);\nbool same = (s == t);',
+        "go": 'n := len(s)\nc := s[0]  // a byte\nsub := s[1:4]\nsame := (s == t)',
+        "csharp": 'int n = s.Length;\nchar c = s[0];\nstring sub = s.Substring(1, 3);\nbool same = (s == t);'}},
+    {"title": "Sort an array", "note": "Gotcha: JavaScript `sort()` sorts as TEXT unless you pass a comparer.", "code": {
+        "python": 'a.sort()\nb = sorted(a, reverse=True)',
+        "javascript": 'a.sort((x, y) => x - y);',
+        "typescript": 'a.sort((x, y) => x - y);',
+        "java": 'Arrays.sort(arr);                       // int[]\nCollections.sort(list);                 // List<Integer>',
+        "cpp": 'sort(a.begin(), a.end());\nsort(a.rbegin(), a.rend());  // descending',
+        "go": 'sort.Ints(a)  // import "sort"',
+        "csharp": 'Array.Sort(arr);\nlist.Sort();'}},
+    {"title": "Stack and queue", "code": {
+        "python": 'st = []; st.append(1); top = st.pop()\nfrom collections import deque\nq = deque(); q.append(1); x = q.popleft()',
+        "javascript": 'const st = []; st.push(1); const top = st.pop();\nconst q = []; q.push(1); const x = q.shift();',
+        "typescript": 'const st: number[] = []; st.push(1); const top = st.pop();\nconst q: number[] = []; q.push(1); const x = q.shift();',
+        "java": 'Deque<Integer> st = new ArrayDeque<>(); st.push(1); int top = st.pop();\nQueue<Integer> q = new ArrayDeque<>(); q.offer(1); int x = q.poll();',
+        "cpp": 'stack<int> st; st.push(1); int top = st.top(); st.pop();\nqueue<int> q; q.push(1); int x = q.front(); q.pop();',
+        "go": 'st := []int{}\nst = append(st, 1)\ntop := st[len(st)-1]\nst = st[:len(st)-1]',
+        "csharp": 'var st = new Stack<int>(); st.Push(1); int top = st.Pop();\nvar q = new Queue<int>(); q.Enqueue(1); int x = q.Dequeue();'}},
+    {"title": "Biggest number a normal int holds", "note": "Interview classic: sums and products overflow. Python never overflows; the others wrap around silently (use long / long long).", "code": {
+        "python": '# unlimited size\n2 ** 100',
+        "javascript": 'Number.MAX_SAFE_INTEGER  // 9007199254740991 (use BigInt beyond)',
+        "typescript": 'Number.MAX_SAFE_INTEGER  // 9007199254740991 (use BigInt beyond)',
+        "java": 'Integer.MAX_VALUE  // 2147483647\nLong.MAX_VALUE     // 9223372036854775807',
+        "cpp": 'INT_MAX    // 2147483647  (<climits>)\nLLONG_MAX  // 9223372036854775807',
+        "go": 'math.MaxInt32  // 2147483647\n// int is 64-bit on modern machines',
+        "csharp": 'int.MaxValue   // 2147483647\nlong.MaxValue  // 9223372036854775807'}},
+]

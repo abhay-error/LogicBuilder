@@ -1,0 +1,18 @@
+# runtime data: learner progress, event log, and AI settings (may contain an API key)
+data/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# scratch files the test scripts may leave behind
+web/_*.html
+*.tmp
