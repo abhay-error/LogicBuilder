@@ -10,7 +10,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        # ubuntu is pinned: setup-python has no Python 3.9 build for newer images
+        os: [ubuntu-24.04, windows-latest, macos-latest]
         python: ["3.9", "3.12"]
     steps:
       - uses: actions/checkout@v4
