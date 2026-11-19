@@ -10,7 +10,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-CFG_PATH = Path(__file__).resolve().parent.parent / "data" / "ai_config.json"
+CFG_PATH = Path(os.environ.get("LB_DATA") or Path(__file__).resolve().parent.parent / "data") / "ai_config.json"
 
 DEFAULTS = {
     "provider": "ollama",
@@ -107,6 +107,27 @@ def ollama_models(cfg):
             return [m["name"] for m in json.loads(r.read()).get("models", [])]
     except Exception:
         return None  # Ollama not running
+
+
+MODEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,79}(:[A-Za-z0-9._-]{1,40})?$")
+
+
+def pull_stream(model, emit):
+    """Ask the local Ollama to download a model; relays its progress as JSON lines (one per update)."""
+    cfg = load_config()
+    base = cfg["providers"]["ollama"]["base_url"].replace("/v1", "")
+    req = urllib.request.Request(base + "/api/pull", data=json.dumps({"model": model, "stream": True}).encode(),
+                                 headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=3600) as r:
+            for raw in r:
+                emit(raw.decode("utf-8", "ignore"))
+    except urllib.error.HTTPError as e:
+        emit(json.dumps({"error": f"Ollama refused the request ({e.code}). Check the model name at ollama.com/library."}) + "\n")
+    except urllib.error.URLError:
+        emit(json.dumps({"error": "Can't reach Ollama. Install and start it first (run setup-ai, or see the README)."}) + "\n")
+    except Exception as e:  # noqa
+        emit(json.dumps({"error": str(e)}) + "\n")
 
 
 def build_messages(history, ctx):

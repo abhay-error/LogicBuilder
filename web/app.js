@@ -700,9 +700,40 @@ async function loadAI() {
 function updateStatus() {
   const c = ai.cfg, fam = $("#ai-family").value, prov = $("#ai-provider").value, model = c.families[fam][prov];
   let s = model ? `Model: ${esc(model)}` : `No ${prov} model for this family`;
-  if (prov === "ollama") s += c.ollama_installed === null ? " · ⚠ Ollama not running" : (c.ollama_installed.includes(model) || c.ollama_installed.includes(model + ":latest")) ? " · ✓ installed" : ` · not installed (run: ollama pull ${model})`;
-  else s += c.providers.openrouter.has_key ? " · ✓ key set" : " · ⚠ add API key in ⚙";
-  $("#ai-status").innerHTML = s;
+  let canDownload = false;
+  if (prov === "ollama") {
+    if (c.ollama_installed === null) s += " · ⚠ Ollama not running. Install/start it with setup-ai (see README)";
+    else if (model && (c.ollama_installed.includes(model) || c.ollama_installed.includes(model + ":latest"))) s += " · ✓ installed";
+    else if (model) { s += " · not downloaded yet "; canDownload = true; }
+  } else s += c.providers.openrouter.has_key ? " · ✓ key set" : " · ⚠ add API key in ⚙";
+  $("#ai-status").innerHTML = s + (canDownload ? ` <button class="btn" id="dl" style="padding:1px 10px;font-size:12px">⬇ Download</button>` : "");
+  if (canDownload) $("#dl").onclick = () => downloadModel(model);
+}
+async function downloadModel(model) {
+  const st = $("#ai-status");
+  const note = (t) => { st.innerHTML = `Downloading ${esc(model)}: ${t}`; };
+  note("starting…");
+  try {
+    const r = await fetch("/api/ai/pull", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model }) });
+    if (!r.ok) { note("failed"); return; }
+    const reader = r.body.getReader(), dec = new TextDecoder();
+    let buf = "", failed = null;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const lines = buf.split("\n"); buf = lines.pop();
+      for (const ln of lines) {
+        if (!ln.trim()) continue;
+        let j; try { j = JSON.parse(ln); } catch { continue; }
+        if (j.error) failed = j.error;
+        else if (j.total && j.completed) note(`${Math.round(100 * j.completed / j.total)}% of ${(j.total / 1e9).toFixed(1)} GB`);
+        else if (j.status) note(esc(j.status));
+      }
+    }
+    if (failed) { st.innerHTML = `⚠ ${esc(failed)}`; return; }
+  } catch (e) { st.textContent = "Download interrupted: " + e.message; return; }
+  ai.cfg = await api("/ai/config"); updateStatus();
 }
 async function saveSel() { ai.cfg = await api("/ai/config", { family: $("#ai-family").value, provider: $("#ai-provider").value }); updateStatus(); }
 $("#ai-family").onchange = saveSel; $("#ai-provider").onchange = saveSel;

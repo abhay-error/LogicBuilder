@@ -27,7 +27,9 @@ from content.signatures import SIGS  # noqa: E402
 WEB = ROOT / "web"
 HOST, PORT = "127.0.0.1", 8000
 PAYWALL = os.environ.get("LB_PAYWALL") == "1"
-ADMIN = os.environ.get("LB_ADMIN", "1") != "0"
+# Hosted mode (e.g. Vercel): shared public server, so no admin page and no changing the AI settings or pulling models.
+HOSTED = os.environ.get("LB_HOSTED") == "1"
+ADMIN = os.environ.get("LB_ADMIN", "1") != "0" and not HOSTED
 LESSON = {x["id"]: x for x in LESSONS}
 PROBLEM = {p["slug"]: p for p in PROBLEMS}
 EX = exercises.index(LESSONS)
@@ -252,11 +254,30 @@ class Handler(BaseHTTPRequestHandler):
     # ---- POST
     def post(self, path):
         b = self.body()
+        if HOSTED and path in ("/api/ai/config", "/api/ai/pull"):
+            raise ApiError(403, "FORBIDDEN", "Disabled on the hosted demo; run LogicBuilder locally to configure AI models")
         if path == "/api/ai/config":
             ai.save_config(b)
             return self.send_json(ai.public_config())
         if path == "/api/ai/chat":
             return self.chat(b)
+        if path == "/api/ai/pull":
+            model = b.get("model")
+            if not isinstance(model, str) or not ai.MODEL_RE.match(model):
+                raise ApiError(400, "VALIDATION_ERROR", "Invalid model name")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/x-ndjson; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+
+            def emit(s):
+                self.wfile.write(s.encode("utf-8"))
+                self.wfile.flush()
+            try:
+                ai.pull_stream(model, emit)
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            return
         if path == "/api/users":
             return self.send_json({"id": store.create(b.get("name"))})
         uid = self.uid()

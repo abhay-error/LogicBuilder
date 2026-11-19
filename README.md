@@ -92,10 +92,29 @@ Windows note: with *Smart App Control* enabled, Windows refuses to run unsigned 
 
 Open the **AI Tutor** panel and pick a model family and where it runs:
 
-- **Local (Ollama)**: install https://ollama.com, then e.g. `ollama pull qwen2.5-coder:7b`, `ollama pull gemma3:4b`, `ollama pull deepseek-r1:8b`.
+- **Local (Ollama)**: free and private, runs on your PC. Set it up with one command (below).
 - **Cloud (OpenRouter)**: paste an API key under the gear icon, or set `OPENROUTER_API_KEY`. Use this for Kimi K2, which is too large for most PCs.
 
-Model ids change often; edit them in the settings panel. Your key stays in `data/ai_config.json` on your machine (git-ignored).
+### One-command local setup
+
+The setup script installs Ollama if it is missing, starts it, downloads the models and points LogicBuilder at them. It picks a size from your RAM and asks before installing anything.
+
+| OS | Command |
+|---|---|
+| Windows | double-click `setup-ai.bat` (or `.\scripts\setup-ai.ps1`) |
+| macOS / Linux | `bash scripts/setup-ai.sh` |
+
+| Profile | Download | Models | Good for |
+|---|---|---|---|
+| `light` | about 4 GB | qwen2.5-coder:1.5b, gemma3:1b, deepseek-r1:1.5b | 8 GB RAM |
+| `standard` | about 13 GB | qwen2.5-coder:7b, gemma3:4b, deepseek-r1:8b | 16 GB RAM or more |
+| `all` / `none` | | both sets / install Ollama only | |
+
+Options: `-Profile standard`, `-Models "qwen2.5-coder:3b","gemma3:4b"`, `-Yes` (no questions), `-DryRun` (show the plan, change nothing). On macOS/Linux: `--profile`, `--models a,b`, `--yes`, `--dry-run`.
+
+You can also download a model without a terminal: pick it in the AI Tutor panel and press **Download** (Ollama must be running). The installers and models are fetched from their official sources rather than bundled here, because they are several GB.
+
+Model ids change often; edit them in the settings panel (gear icon). Your key stays in `data/ai_config.json` on your machine (git-ignored).
 
 ## Roadmap
 
@@ -114,6 +133,7 @@ Pick something from the issues tagged **good first issue**, or open one to propo
 python tests/selftest.py    # content + engine: every reference solution must pass its tests
 python tests/api_test.py    # server end to end, on a temporary data folder
 python tests/lang_test.py   # all languages; a missing toolchain is reported as SKIP, never silently passed
+python tests/setup_test.py  # AI setup helpers (uses a temp folder, never your real settings)
 ```
 
 GitHub Actions runs all three on Windows, macOS and Linux.
@@ -125,7 +145,8 @@ server.py            web server + REST API (stdlib only)
 app/                 sandbox + tracer, multi-language runner, exercises, learning engine, store, AI client
 content/             lessons, problems, signatures, cheat sheet (all data, no logic)
 web/                 index.html, app.js, style.css, fonts/
-tests/               selftest.py, api_test.py, lang_test.py
+scripts/             setup-ai.ps1 / setup-ai.sh (install Ollama + models), set_models.py
+tests/               selftest.py, api_test.py, lang_test.py, setup_test.py
 docs/                low-level design, high-level design, product notes, screenshots
 data/                created at run time (progress, event log, AI settings); git-ignored
 ```

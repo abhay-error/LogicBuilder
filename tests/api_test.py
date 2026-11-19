@@ -161,6 +161,15 @@ try:
     check("damaged file is kept, not deleted", any(Path(tmp, "users").glob(f"{uid}.corrupt-*.json")))
     check("drafts survive recovery", "draft:two-sum:python" in call("/api/me/state", user=uid)[1]["drafts"])
 
+    # ---- in-app model download (Ollama is not running in tests, so we only check validation and graceful failure)
+    for bad in ["", "../etc/passwd", "a b", "x;rm -rf", "model:" + "z" * 50, None, 5]:
+        check(f"model name rejected: {bad!r}"[:60], call("/api/ai/pull", {"model": bad})[0] == 400)
+    req = urllib.request.Request(BASE + "/api/ai/pull", data=json.dumps({"model": "qwen2.5-coder:1.5b"}).encode(), headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        body = resp.read().decode()
+    err = [json.loads(l) for l in body.splitlines() if l.strip()]
+    check("download without Ollama reports a clear error", resp.status == 200 and err and "error" in err[-1] and "Ollama" in err[-1]["error"], body[:200])
+
     s, a = call("/api/admin/stats")
     check("admin stats", s == 200 and len(a["users"]) >= 2 and a["hardest_exercises"] is not None)
     s, r = call("/api/export")
