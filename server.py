@@ -47,14 +47,21 @@ def public_problem(p, user):
             "concepts": p["concepts"], "status": user["problems"].get(p["slug"], {}).get("status", "unseen")}
 
 
-def public_lesson(lsn):
+def public_lesson(lsn, user):
     blocks = []
     for i, b in enumerate(lsn["blocks"]):
         if b["type"] in exercises.INTERACTIVE:
-            blocks.append(exercises.public(exercises.exercise_id(lsn["id"], i), lsn, b))
+            p = exercises.public(exercises.exercise_id(lsn["id"], i), lsn, b)
+            p["done"] = user["exercises"].get(p["id"], {}).get("ok", 0) > 0  # answered correctly before
+            blocks.append(p)
         else:
             blocks.append(b)
-    return {"id": lsn["id"], "title": lsn["title"], "level": lsn["level"], "minutes": lsn["minutes"], "blocks": blocks}
+    completed = lsn["id"] in user["lessons"]
+    step = user["lesson_state"].get(lsn["id"], {}).get("step", 0)
+    # an unfinished lesson reopens where you left off; a finished one restarts as a quick review
+    resume = 0 if completed else max(0, min(int(step), len(blocks)))
+    return {"id": lsn["id"], "title": lsn["title"], "level": lsn["level"], "minutes": lsn["minutes"],
+            "blocks": blocks, "resume": resume, "completed": completed}
 
 
 def get_lang(b):
@@ -150,6 +157,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def uid(self):
         u = self.headers.get("X-User", "default")
+        if "u=" in (urlparse(self.path).query or ""):  # allows a final save while the page is closing
+            u = dict(p.split("=", 1) for p in urlparse(self.path).query.split("&") if "=" in p).get("u", u)
         if not store.valid(u):
             raise ApiError(400, "BAD_USER", "Invalid user id")
         return u
@@ -179,6 +188,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.static(path)
         if path == "/api/users":
             return self.send_json(store.list_users())
+        if path == "/api/active":
+            return self.send_json({"id": store.get_last()})
         if path == "/api/ai/config":
             return self.send_json(ai.public_config())
         if path == "/api/languages":
@@ -202,7 +213,7 @@ class Handler(BaseHTTPRequestHandler):
                 raise ApiError(404, "LESSON_NOT_FOUND", "Lesson not found")
             if locked(lsn, user):
                 raise ApiError(402, "PAYWALL", "This lesson is part of the Pro plan")
-            return self.send_json(public_lesson(lsn))
+            return self.send_json(public_lesson(lsn, user))
         if path == "/api/problems":
             return self.send_json([public_problem(p, user) for p in PROBLEMS])
         m = re.fullmatch(r"/api/problems/([\w-]+)", path)
@@ -223,6 +234,8 @@ class Handler(BaseHTTPRequestHandler):
                                    "solved": sum(1 for v in user["problems"].values() if v["status"] == "solved"),
                                    "problems_total": len(PROBLEMS), "review_due": due,
                                    "badges": learning.badges(user)})
+        if path == "/api/me/state":
+            return self.send_json({"drafts": user["drafts"], "prefs": user["prefs"], "lessons": user["lesson_state"]})
         if path == "/api/skills":
             return self.send_json(learning.mastery(user, LESSONS, PROBLEMS, EX))
         if path == "/api/review/due":
@@ -256,6 +269,36 @@ class Handler(BaseHTTPRequestHandler):
             lang = get_lang(b)
             store.log_event(uid, "run", lang=lang)
             return self.send_json(langs.run_program(lang, code))
+        if path == "/api/me/drafts":
+            items = b.get("drafts")
+            if not isinstance(items, dict):
+                raise ApiError(400, "VALIDATION_ERROR", "drafts must be an object")
+            store.save_drafts(uid, items)
+            return self.send_json({"ok": True})
+        if path == "/api/me/prefs":
+            def upd(d):
+                if b.get("lang") in langs.LANGS:
+                    d["prefs"]["lang"] = b["lang"]
+            store.update(uid, upd, touch=False)
+            return self.send_json({"ok": True})
+        if path == "/api/me/active":
+            store.load(uid)  # must exist
+            store.set_last(uid)
+            return self.send_json({"ok": True})
+        m = re.fullmatch(r"/api/lessons/([\w-]+)/step", path)
+        if m:
+            lsn = LESSON.get(m[1])
+            if not lsn:
+                raise ApiError(404, "LESSON_NOT_FOUND", "Lesson not found")
+            step = b.get("step")
+            if not isinstance(step, int) or not 0 <= step <= len(lsn["blocks"]):
+                raise ApiError(400, "VALIDATION_ERROR", "Bad step")
+
+            def upd(d):
+                st = d["lesson_state"].setdefault(m[1], {"step": 0})
+                st["step"] = max(st["step"], step)  # progress only moves forward
+            store.update(uid, upd)
+            return self.send_json({"ok": True})
         if path == "/api/me":
             def upd(d):
                 if isinstance(b.get("name"), str) and b["name"].strip():

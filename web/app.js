@@ -17,6 +17,49 @@ const api = async (path, body) => {
   if (!r.ok) { const e = new Error(j.error ? j.error.message : "Request failed"); e.code = j.error && j.error.code; e.status = r.status; throw e; }
   return j;
 };
+/* ---------- per-learner state kept ON THE SERVER: code drafts, plans, playground code, language, lesson position ---------- */
+let STATE = { drafts: {}, prefs: {}, lessons: {} };
+const pendingDrafts = {};
+let flushTimer = null;
+const draftGet = (k, d) => (k in STATE.drafts ? STATE.drafts[k] : d);
+function draftSet(k, v) { STATE.drafts[k] = v; pendingDrafts[k] = v; clearTimeout(flushTimer); flushTimer = setTimeout(flushDrafts, 700); }
+async function flushDrafts() {
+  const items = { ...pendingDrafts };
+  for (const k in pendingDrafts) delete pendingDrafts[k];
+  if (!Object.keys(items).length) return;
+  try {
+    await fetch("/api/me/drafts", { method: "POST", keepalive: true, headers: { "X-User": curUser(), "Content-Type": "application/json" }, body: JSON.stringify({ drafts: items }) });
+  } catch { Object.assign(pendingDrafts, items); } // retry with the next change
+}
+addEventListener("pagehide", flushDrafts);
+document.addEventListener("visibilitychange", () => { if (document.hidden) flushDrafts(); });
+async function loadState() {
+  try { STATE = await api("/me/state"); } catch { STATE = { drafts: {}, prefs: {}, lessons: {} }; }
+  await migrateLocal();
+}
+/* one-time: copy anything this browser saved before progress moved to the server */
+async function migrateLocal() {
+  const u = curUser(), flag = `lb-migrated-${u}`;
+  if (store.get(flag, "")) return;
+  const found = {};
+  try {
+    const esc2 = u.replace(/[^\w-]/g, "");
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i), v = localStorage.getItem(k);
+      let m;
+      if ((m = k.match(new RegExp(`^draft-${esc2}-(.+)-(python|javascript|typescript|java|cpp|go|csharp)$`)))) found[`draft:${m[1]}:${m[2]}`] = v;
+      else if ((m = k.match(new RegExp(`^draft-${esc2}-(.+)$`)))) found[`draft:${m[1]}:python`] = v;
+      else if ((m = k.match(new RegExp(`^plan-${esc2}-(.+)$`)))) found[`plan:${m[1]}`] = v;
+      else if ((m = k.match(/^pg-code-(\w+)$/))) found[`pg:${m[1]}`] = v;
+    }
+  } catch { /* storage unavailable */ }
+  for (const k in found) if (found[k] && !(k in STATE.drafts)) { STATE.drafts[k] = found[k]; pendingDrafts[k] = found[k]; }
+  const oldLang = store.get(`lb-lang-${u}`, "");
+  if (oldLang && !STATE.prefs.lang) { STATE.prefs.lang = oldLang; api("/me/prefs", { lang: oldLang }).catch(() => {}); }
+  await flushDrafts();
+  store.set(flag, "1");
+}
+
 function toast(msg) { const t = document.createElement("div"); t.className = "toast"; t.textContent = msg; document.body.appendChild(t); setTimeout(() => t.remove(), 2200); }
 
 /* ---------- tiny markdown ---------- */
@@ -185,7 +228,15 @@ async function visualizeInto(el, code, url = "/trace") {
 /* ---------- exercises ---------- */
 const LABEL = { quiz: "Quick check", predict: "Predict the output", fill: "Fill the blank", parsons: "Put in order", trace_table: "Trace table", bug: "Find the bug" };
 function mountExercise(host, ex, onDone) {
+  host.classList.remove("done");
   host.classList.add("card", "ex");
+  if (ex.done && !ex.retry) { // already solved earlier: show a compact summary, with the option to practise again
+    host.classList.add("done");
+    host.innerHTML = `<div class="ex-h"><span class="badge">${LABEL[ex.type]}</span> ${ic(ex.prompt)}</div><p class="good" style="margin:6px 0">✅ You answered this correctly before.</p><button class="btn again">Practise it again</button>`;
+    $(".again", host).onclick = () => mountExercise(host, { ...ex, retry: true }, onDone);
+    onDone(true);
+    return;
+  }
   host.innerHTML = `<div class="ex-h"><span class="badge">${LABEL[ex.type]}</span> ${ic(ex.prompt)}</div><div class="ex-body"></div><div class="ex-actions row"></div><div class="fb"></div>`;
   const body = $(".ex-body", host), act = $(".ex-actions", host), fb = $(".fb", host);
   let attempts = 0, finished = false, getAnswer = () => null, mark = () => {}, reveal = () => {}, lock = () => {};
@@ -345,7 +396,7 @@ async function lesson(id) {
     else if (b.type === "code") {
       d.innerHTML = `<div class="codeblock"><pre><code>${esc(b.code)}</code></pre><div class="bar"><button class="btn accent" data-v>▶ Visualize</button><button class="btn" data-p>Edit in playground</button></div><div class="vz" style="padding:8px"></div></div>`;
       $("[data-v]", d).onclick = () => { aiCtx.code = b.code; visualizeInto($(".vz", d), b.code); };
-      $("[data-p]", d).onclick = () => { store.set("pg-code-python", b.code); store.set(`lb-lang-${curUser()}`, "python"); location.hash = "#/playground"; };
+      $("[data-p]", d).onclick = () => { draftSet("pg:python", b.code); setLang("python"); location.hash = "#/playground"; };
     } else if (interactive(b)) mountExercise(d, b, () => { gate = true; bar(); refreshStats(); });
     return d;
   }
@@ -356,16 +407,19 @@ async function lesson(id) {
     cont.disabled = !gate;
     cont.textContent = shown >= n ? "Finish lesson (+10 XP) ✓" : "Continue ▶";
   }
-  function revealNext() {
+  function revealNext(quiet) {
     let first = null;
     do {
       const b = l.blocks[shown], el = renderBlock(b);
       box.appendChild(el); first = first || el; shown++;
-      gate = !interactive(b);
+      gate = !interactive(b) || !!b.done; // an exercise you already solved doesn't block you again
       if (!(b.type === "text" && l.blocks[shown] && l.blocks[shown].type === "code")) break;
     } while (shown < n);
     bar();
-    first.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (!quiet) {
+      first.scrollIntoView({ behavior: "smooth", block: "start" });
+      api(`/lessons/${id}/step`, { step: shown }).catch(() => {}); // remember where you are
+    }
   }
   cont.onclick = async () => {
     if (shown < n) return revealNext();
@@ -375,7 +429,12 @@ async function lesson(id) {
     $("#sb").outerHTML = `<div class="card paywall"><h2>🎉 Lesson complete!</h2><p>+10 XP. Exercises you answered are now in your review queue.</p>
       ${r.next ? `<a class="btn accent" href="#/lesson/${r.next}">Next lesson ▶</a>` : ""} <a class="btn" href="#/practice">Practice problems</a> <a class="btn" href="#/learn">All lessons</a></div>`;
   };
-  revealNext();
+  if (l.resume > 0) {
+    while (shown < l.resume && shown < n) revealNext(true); // pick up where you left off
+    const last = box.lastElementChild;
+    if (last) last.scrollIntoView({ block: "center" });
+    toast(`Welcome back: resumed at step ${shown} of ${n}`);
+  } else revealNext();
   setQuick(["Explain this like I'm 10", "Give me another example", "Quiz me on this"]);
 }
 
@@ -388,7 +447,7 @@ async function practice() {
 
 async function problem(slug) {
   const p = await api("/problems/" + slug);
-  const dk = (lg) => `draft-${curUser()}-${slug}-${lg}`, pkey = `plan-${curUser()}-${slug}`;
+  const dk = (lg) => `draft:${slug}:${lg}`, pkey = `plan:${slug}`;
   let lang = langPref();
   view.innerHTML = `<a href="#/practice">← All problems</a><h1>${esc(p.title)} <span class="badge">${"★".repeat(p.difficulty)}</span></h1>
   <div class="split"><div class="card"><div id="stmt">${md(p.statement)}</div>
@@ -403,13 +462,12 @@ async function problem(slug) {
     <div class="row"><button class="btn" id="run">Run examples</button><button class="btn accent" id="submit">Submit (all tests)</button><button class="btn" id="vis">Visualize my code</button><button class="btn" id="reset">Reset</button></div>
     <div id="out"></div></div></div><div id="viz" style="margin-top:16px"></div>`;
   const ta = $("#code"), out = $("#out"), hints = $("#hints"), plan = $("#plan");
-  plan.value = store.get(pkey, "");
+  plan.value = draftGet(pkey, "");
   if (plan.value) $("details.plan").open = true;
   aiCtx = { problem: `${p.title}\n${p.statement}\nFunction: ${p.entry}`, plan: plan.value };
   const loadLang = () => {
     $("#lang").value = lang;
-    const legacy = lang === "python" ? store.get(`draft-${curUser()}-${slug}`, p.starters.python) : p.starters[lang];
-    ta.value = store.get(dk(lang), legacy);
+    ta.value = draftGet(dk(lang), p.starters[lang]);
     aiCtx.code = ta.value; aiCtx.lang = lang;
     const L = langInfo(lang), ok = L && L.available;
     $("#lang-note").innerHTML = ok ? (L.visualize ? "" : "Step-by-step visualizer is Python-only; run and submit work normally.") : `⚠ ${esc(L ? L.label : lang)} isn't installed. ${esc(L ? L.hint : "")}`;
@@ -417,16 +475,16 @@ async function problem(slug) {
     $("#vis").disabled = !(ok && L.visualize);
     $("#vis").title = L && L.visualize ? "" : "Visualizer supports Python only";
   };
-  $("#lang").onchange = () => { store.set(dk(lang), ta.value); lang = $("#lang").value; store.set(`lb-lang-${curUser()}`, lang); loadLang(); };
-  ta.addEventListener("input", () => { store.set(dk(lang), ta.value); aiCtx.code = ta.value; });
-  plan.addEventListener("input", () => { store.set(pkey, plan.value); aiCtx.plan = plan.value; });
+  $("#lang").onchange = () => { draftSet(dk(lang), ta.value); lang = $("#lang").value; setLang(lang); loadLang(); };
+  ta.addEventListener("input", () => { draftSet(dk(lang), ta.value); aiCtx.code = ta.value; });
+  plan.addEventListener("input", () => { draftSet(pkey, plan.value); aiCtx.plan = plan.value; });
   $("#plan-ai").onclick = () => askAI(plan.value.trim() ? "Please review my plan. Is it clear and complete? What am I missing? Don't write the code for me." : "I haven't written a plan yet. Ask me 2 short questions to help me start planning.");
   ta.addEventListener("keydown", (e) => { if (e.key === "Tab") { e.preventDefault(); document.execCommand("insertText", false, "    "); } });
   let shown = 0;
   const showHint = async (lv) => { const h = await api(`/problems/${slug}/hint`, { level: lv }); hints.insertAdjacentHTML("beforeend", `<div class="hint"><b>Hint ${h.level}:</b> ${esc(h.text)}</div>`); shown = lv; if (shown >= p.hint_count) $("#hint").disabled = true; };
   for (let i = 1; i <= p.hints_used; i++) await showHint(i);
   $("#hint").onclick = () => showHint(shown + 1);
-  $("#reset").onclick = () => { if (confirm("Reset your code to the starter?")) { ta.value = p.starters[lang]; store.set(dk(lang), ta.value); aiCtx.code = ta.value; } };
+  $("#reset").onclick = () => { if (confirm("Reset your code to the starter?")) { ta.value = p.starters[lang]; draftSet(dk(lang), ta.value); aiCtx.code = ta.value; } };
   const show = (r) => {
     const bad = r.verdict !== "AC";
     aiCtx.result = `${r.verdict}: ${r.passed}/${r.total} tests passed. ` + (r.error ? `${r.error.type}: ${r.error.message}` : "") + r.results.filter((x) => !x.pass && x.sample).map((x) => ` Input ${JSON.stringify(x.input)} expected ${JSON.stringify(x.expected)} got ${JSON.stringify(x.actual)}${x.error ? " error " + x.error : ""}`).join(";");
@@ -508,11 +566,11 @@ function playground() {
   <textarea class="editor" id="code" spellcheck="false"></textarea>
   <div class="row"><button class="btn" id="run">Run</button><button class="btn accent" id="vis">▶ Visualize</button></div><div id="out"></div><div id="viz"></div>`;
   const ta = $("#code");
-  const pk = (lg) => `pg-code-${lg}`;
+  const pk = (lg) => `pg:${lg}`;
   const load = () => {
     const L = langInfo(lang), ok = L && L.available;
     $("#lang").value = lang;
-    ta.value = store.get(pk(lang), L ? L.template : "");
+    ta.value = draftGet(pk(lang), L ? L.template : "");
     aiCtx = { code: ta.value, lang };
     $("#lang-note").innerHTML = ok ? "" : `⚠ ${esc(L ? L.label : lang)} isn't installed. ${esc(L ? L.hint : "")}`;
     $("#run").disabled = !ok;
@@ -520,8 +578,8 @@ function playground() {
     $("#vis").title = L && L.visualize ? "" : "Visualizer supports Python only";
     $("#out").innerHTML = ""; $("#viz").innerHTML = "";
   };
-  $("#lang").onchange = () => { store.set(pk(lang), ta.value); lang = $("#lang").value; store.set(`lb-lang-${curUser()}`, lang); load(); };
-  ta.addEventListener("input", () => { store.set(pk(lang), ta.value); aiCtx.code = ta.value; });
+  $("#lang").onchange = () => { draftSet(pk(lang), ta.value); lang = $("#lang").value; setLang(lang); load(); };
+  ta.addEventListener("input", () => { draftSet(pk(lang), ta.value); aiCtx.code = ta.value; });
   ta.addEventListener("keydown", (e) => { if (e.key === "Tab") { e.preventDefault(); document.execCommand("insertText", false, "    "); } });
   $("#run").onclick = async () => {
     $("#run").disabled = true; $("#out").innerHTML = '<div class="res">Running…</div>';
@@ -541,9 +599,10 @@ function playground() {
 let LANGS_LIST = [];
 const langInfo = (id) => LANGS_LIST.find((l) => l.id === id);
 function langPref() {
-  const v = store.get(`lb-lang-${curUser()}`, "python");
+  const v = STATE.prefs.lang || "python";
   return langInfo(v) ? v : "python";
 }
+function setLang(l) { STATE.prefs.lang = l; api("/me/prefs", { lang: l }).catch(() => {}); }
 const langOptions = () => LANGS_LIST.map((l) => `<option value="${l.id}">${esc(l.label)}${l.available ? "" : " (not installed)"}</option>`).join("");
 async function loadLangs(refresh) {
   try { LANGS_LIST = await (await fetch("/api/languages" + (refresh ? "?refresh=1" : ""))).json(); } catch { LANGS_LIST = [{ id: "python", label: "Python", available: true, visualize: true, template: "" }]; }
@@ -591,16 +650,31 @@ addEventListener("hashchange", route);
 async function loadUsers() {
   let users = [];
   try { users = await (await fetch("/api/users")).json(); } catch { /* offline */ }
-  if (!users.some((u) => u.id === curUser())) store.set("lb-user", "default");
+  let cur = store.get("lb-user", "");
+  if (!cur) { // browser data was cleared or this is a new browser: open on whoever used the app last
+    try { cur = (await (await fetch("/api/active")).json()).id; } catch { cur = "default"; }
+  }
+  if (!users.some((u) => u.id === cur)) cur = "default";
+  store.set("lb-user", cur);
   $("#user").innerHTML = users.map((u) => `<option value="${esc(u.id)}">${esc(u.name)}</option>`).join("");
-  $("#user").value = curUser();
+  $("#user").value = cur;
 }
-$("#user").onchange = () => { store.set("lb-user", $("#user").value); ai.history = []; refreshStats(); route(); };
+async function switchLearner(id) {
+  await flushDrafts(); // save the previous learner's unsaved typing first
+  store.set("lb-user", id);
+  ai.history = [];
+  await loadState();
+  api("/me/active", {}).catch(() => {});
+  refreshStats(); route();
+}
+$("#user").onchange = () => switchLearner($("#user").value);
 $("#user-add").onclick = async () => {
   const name = prompt("Name of the new learner?");
   if (!name) return;
+  await flushDrafts();
   const r = await api("/users", { name });
-  store.set("lb-user", r.id); await loadUsers(); ai.history = []; refreshStats(); location.hash = "#/"; route();
+  store.set("lb-user", r.id); await loadUsers(); location.hash = "#/";
+  await switchLearner(r.id);
 };
 
 /* ---------- AI tutor ---------- */
@@ -695,4 +769,7 @@ document.addEventListener("click", (e) => { if (!e.target.closest(".appear")) { 
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") $("#pop").hidden = true; });
 applyLook(false);
 
-Promise.all([loadUsers(), loadLangs()]).then(() => { route(); refreshStats(); });
+loadUsers().then(() => Promise.all([loadState(), loadLangs()])).then(() => {
+  api("/me/active", {}).catch(() => {});
+  route(); refreshStats();
+});

@@ -63,6 +63,17 @@ Needs only **Python 3.9+**. Your browser opens at http://127.0.0.1:8000. The ser
 - **Light / dark / auto theme** and font choices (Geist Mono, Fira Mono, Fira Code, JetBrains Mono, Oswald), all bundled for offline use.
 - **Multiple learner profiles**, data export, and groundwork for a paid product (plans, a server-enforced paywall, an admin analytics page). See [docs/03-PRODUCT-AND-BUSINESS.md](docs/03-PRODUCT-AND-BUSINESS.md).
 
+## Your progress is saved per learner
+
+Use the learner menu in the top bar (the **+** adds a learner). Everything is stored on the server side in `data/users/<name>.json`, not in the browser, so clearing your browser or opening another one loses nothing:
+
+- completed lessons, solved problems, XP, streaks, badges, review schedule
+- **where you stopped in a lesson**, and which exercises you already answered
+- your code drafts for every problem and language, your written plans, and your playground code
+- your language choice, and who used the app last
+
+A backup of the previous version is kept next to each file; if a file is ever damaged it is set aside (`*.corrupt-*.json`) and the backup is loaded instead. To move your progress to another computer, copy the `data/` folder. There are no passwords: profiles are for separating learners on one machine, not for security.
+
 ## Languages: what you need installed
 
 Python needs nothing. For the others, install the toolchain, then restart or press **Re-scan** on the Languages page. Missing ones show an install command for your OS.

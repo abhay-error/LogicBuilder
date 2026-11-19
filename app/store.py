@@ -6,6 +6,7 @@ module is replaced by a PostgreSQL repository with the same functions (LLD §3, 
 import json
 import os
 import re
+import shutil
 import threading
 import time
 from datetime import date, datetime, timedelta
@@ -28,36 +29,100 @@ def valid(uid):
 
 def _blank(uid, name, plan="free"):
     return {"id": uid, "name": name, "plan": plan, "created": datetime.now().isoformat(timespec="seconds"),
-            "lessons": [], "problems": {}, "exercises": {}, "xp": 0, "days": {}}
+            "lessons": [], "problems": {}, "exercises": {}, "xp": 0, "days": {},
+            "drafts": {},        # code drafts, written plans, playground code (key -> text)
+            "lesson_state": {},  # lesson id -> {"step": blocks revealed so far}
+            "prefs": {}}         # e.g. {"lang": "java"}
 
 
 def _path(uid):
     return USERS / f"{uid}.json"
 
 
+def _bak(uid):
+    return USERS / f"{uid}.json.bak"
+
+
 def load(uid):
     if not valid(uid):
         raise NotFound(uid)
     with _lock:
+        p = _path(uid)
         try:
-            d = json.loads(_path(uid).read_text("utf-8"))
+            d = json.loads(p.read_text("utf-8"))
         except FileNotFoundError:
             if uid != "default":
                 raise NotFound(uid)
             d = _blank("default", "Me")
         except Exception:
-            d = _blank(uid, uid)
+            # The file is damaged. Never silently start from zero: recover the last good copy,
+            # and keep the damaged file for inspection instead of overwriting it.
+            d = None
+            try:
+                d = json.loads(_bak(uid).read_text("utf-8"))
+            except Exception:
+                pass
+            try:
+                p.replace(USERS / f"{uid}.corrupt-{int(time.time())}.json")
+            except OSError:
+                pass
+            if d is None:
+                d = _blank(uid, uid)
+            else:
+                _write(d, keep_backup=False)
         for k, v in _blank(uid, uid).items():  # forward-compatible defaults
             d.setdefault(k, v)
         return d
 
 
-def _write(d):
+def _write(d, keep_backup=True):
     USERS.mkdir(parents=True, exist_ok=True)
     p = _path(d["id"])
+    if keep_backup and p.exists():
+        try:
+            shutil.copyfile(p, _bak(d["id"]))  # last known-good copy, used if the main file ever gets damaged
+        except OSError:
+            pass
     tmp = p.with_suffix(".tmp")
     tmp.write_text(json.dumps(d, indent=1), "utf-8")
     tmp.replace(p)  # atomic on Windows, macOS and Linux
+
+
+def get_last():
+    """The learner who used the app last (so a cleared browser still opens on the right profile)."""
+    try:
+        uid = (DATA / "last_user.txt").read_text("utf-8").strip()
+        if valid(uid) and (_path(uid).exists() or uid == "default"):
+            return uid
+    except OSError:
+        pass
+    return "default"
+
+
+def set_last(uid):
+    try:
+        DATA.mkdir(parents=True, exist_ok=True)
+        (DATA / "last_user.txt").write_text(uid, "utf-8")
+    except OSError:
+        pass
+
+
+DRAFT_KEY = re.compile(r"^[\w:.-]{1,80}$")
+MAX_DRAFT = 60_000
+MAX_DRAFTS = 400
+
+
+def save_drafts(uid, items):
+    """items: {key: text or None}. None deletes. Validated and size-capped."""
+    def upd(d):
+        for k, v in items.items():
+            if not isinstance(k, str) or not DRAFT_KEY.match(k):
+                continue
+            if v is None:
+                d["drafts"].pop(k, None)
+            elif isinstance(v, str) and len(v) <= MAX_DRAFT and (k in d["drafts"] or len(d["drafts"]) < MAX_DRAFTS):
+                d["drafts"][k] = v
+    return update(uid, upd, touch=False)
 
 
 def update(uid, fn, touch=True):
